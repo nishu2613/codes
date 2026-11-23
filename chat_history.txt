@@ -1,0 +1,3454 @@
+CHAT HISTORY
+Session ID: 7101ee18-eac1-42d0-837b-da2c0efd65d1
+Summary: explain this code what it will do 
+Created: 2026-11-13T08:20:30.480Z
+Updated: 2026-11-23T09:30:09.992Z
+================================================================================
+
+Turn 0
+[User]
+explain this code what it will do 
+[Assistant]
+This script downloads protein sequences from UniProt and combines them into one FASTA file.
+
+File: [fasta_extract_from_uni.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fasta_extract_from_uni.py)
+
+### What it does
+
+1. **Asks for two paths**
+   - A text file containing UniProt IDs.
+   - The output FASTA file path.
+
+2. **Validates the input file**
+   - Exits if the input file does not exist.
+
+3. **Reads UniProt IDs**
+   - Ignores blank lines.
+   - Ignores lines beginning with `#`.
+   - Removes duplicate IDs while preserving their order.
+
+4. **Downloads each sequence**
+   - Requests sequences from:
+
+   ```text
+   https://rest.uniprot.org/uniprotkb/{ID}.fasta
+   ```
+
+5. **Retries temporary failures**
+   - Attempts each download up to 3 times.
+   - Retries network errors, HTTP `429`, and server errors (`500–599`).
+   - Uses increasing delays between retries.
+   - Respects the server’s `Retry-After` header when available.
+
+6. **Writes successful results**
+   - Appends all downloaded FASTA records to the requested output file.
+
+7. **Records failures**
+   - Failed UniProt IDs are written to:
+
+   ```text
+   <output-folder>/failed_uniprot_ids.txt
+   ```
+
+8. **Waits between requests**
+   - Pauses for `0.2` seconds after each ID to reduce server load.
+
+### Example input
+
+```text
+P69905
+P68871
+# This is a comment
+P69905
+```
+
+The duplicate `P69905` is downloaded only once.
+
+### Example usage
+
+Run:
+
+```bash
+python fasta_extract_from_uni.py
+```
+
+Then enter:
+
+```text
+Path to UniProt IDs txt file: ids.txt
+Output FASTA path to write combined sequences: results/proteins.fasta
+```
+
+The script creates:
+
+```text
+results/proteins.fasta
+results/failed_uniprot_ids.txt
+```
+
+The output FASTA file contains all successfully retrieved protein sequences.
+--------------------------------------------------------------------------------
+
+Turn 1
+[User]
+what is the difference between this file and previous fasta_extract_from_uni.py
+[Assistant]
+The main difference is that [fetch_fasta.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fetch_fasta.py) is a more robust version of [fasta_extract_from_uni.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fasta_extract_from_uni.py).
+
+| Feature | `fasta_extract_from_uni.py` | `fetch_fasta.py` |
+|---|---|---|
+| Input prompts | UniProt IDs file and output path | Same, plus optional NCBI taxonomy ID |
+| UniProt lookup | Direct UniProtKB URL only | Three fallback methods |
+| Handles secondary/merged IDs | No | Yes, using `sec_acc` |
+| Handles UniParc IDs | No | Yes |
+| Multiple returned FASTA records | Writes all returned text | Extracts only the first FASTA record |
+| FASTA headers | Keeps UniProt’s original header | Adds queried ID to the header |
+| Retry behavior | Retries the direct URL | Retries each fallback endpoint |
+| Failure message | “Failed after retries” | “Failed across all tiers” |
+
+### Important behavior in `fetch_fasta.py`
+
+For every ID, it tries these sources in order:
+
+1. **Direct UniProtKB entry**
+
+   ```text
+   /uniprotkb/{uid}.fasta
+   ```
+
+2. **Secondary accession lookup**
+
+   ```text
+   /uniprotkb/stream?query=sec_acc:{uid}
+   ```
+
+   If a taxonomy ID is entered, it also adds:
+
+   ```text
+   AND taxonomy_id:{tax_id}
+   ```
+
+3. **UniParc archive**
+
+   ```text
+   /uniparc/stream?query={uid}&format=fasta
+   ```
+
+This means `fetch_fasta.py` can retrieve sequences when an ID is old, merged, secondary, or available through UniParc, while the older script would mark it as failed.
+
+### FASTA header difference
+
+The older script may write a header like:
+
+```text
+>sp|P69905|HBA_HUMAN Hemoglobin subunit alpha
+```
+
+The newer script changes it to something like:
+
+```text
+>P69905 | sp|P69905|HBA_HUMAN Hemoglobin subunit alpha
+```
+
+This makes the originally queried ID easy to identify.
+
+### Summary
+
+Use `fasta_extract_from_uni.py` when you only need direct UniProtKB lookups.
+
+Use `fetch_fasta.py` when you need:
+
+- Better recovery for missing or obsolete IDs
+- Secondary accession support
+- UniParc fallback
+- Taxonomy filtering
+- One FASTA record per input ID
+- Standardized headers with the queried ID included
+--------------------------------------------------------------------------------
+
+Turn 2
+[User]
+what this code will do
+[Assistant]
+This script extracts unique UniProt accessions from a CSV file.
+
+File: [extract_all_accessions.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_all_accessions.py)
+
+### What it does
+
+1. Prompts for:
+   - Input CIF accession CSV file
+   - Output text file
+
+2. Checks that:
+   - Both paths were entered.
+   - The input file exists.
+   - The CSV contains a column named `accessions`.
+
+3. Reads every value in the `accessions` column.
+
+4. Splits multiple accessions separated by semicolons:
+
+   ```text
+   P12345; Q67890; A11111
+   ```
+
+5. Removes:
+   - Empty values
+   - `NIL`
+   - `.`
+   - `?`
+   - Duplicate accessions
+
+6. Writes one unique accession per line in the output text file.
+
+### Example
+
+Input CSV:
+
+```csv
+structure_id,accessions
+1ABC,P12345; Q67890
+2DEF,P12345
+3GHI,NIL
+4JKL,?
+```
+
+Output TXT:
+
+```text
+P12345
+Q67890
+```
+
+The order is preserved based on the first occurrence in the CSV.
+
+It also creates the output directory automatically if it does not already exist.
+--------------------------------------------------------------------------------
+
+Turn 3
+[User]
+explain this and what is the inputs for this codes from that inputs what it is extracting the details
+[Assistant]
+This script combines information from:
+
+1. A **FASTA file or directory of FASTA files**
+2. An **mmCIF file or directory of mmCIF files**
+
+It creates a CSV summary connecting FASTA entities and chains with structural information from mmCIF files.
+
+File: [fasta_mmcif_entity_chain_to_csv.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fasta_mmcif_entity_chain_to_csv.py)
+
+## Inputs
+
+When you run it:
+
+```bash
+python fasta_mmcif_entity_chain_to_csv.py
+```
+
+It asks:
+
+```text
+Enter FASTA file path:
+Enter mmCIF file path:
+```
+
+### FASTA input
+
+The FASTA header must follow a format similar to:
+
+```text
+>1IWP_3|Chains A [auth A], B [auth C]|Some protein description
+```
+
+The script extracts:
+
+- `1IWP` → PDB ID
+- `3` → entity ID
+- `A,B` → label chain IDs
+- `A,C` → author/auth chain IDs
+- `Some protein description` → description
+
+The sequence lines themselves are not processed. Only header lines beginning with `>` are used.
+
+### mmCIF input
+
+The mmCIF file must correspond to the PDB ID from the FASTA header.
+
+For example:
+
+```text
+FASTA header: >1IWP_3|Chains A|Protein
+mmCIF file:   1IWP.cif
+```
+
+The script reads the mmCIF `_entity_poly` category and finds the matching entity ID. It extracts:
+
+- Whether the entity is a polypeptide
+- Whether it contains non-standard monomers
+
+## Output
+
+The output filename is fixed:
+
+```text
+entity_chain_summary.csv
+```
+
+It is created in the directory where the script is run.
+
+The CSV contains these columns:
+
+| Column | Meaning |
+|---|---|
+| `pdb_id` | PDB structure ID from the FASTA header |
+| `entity_id` | Entity number from the FASTA header |
+| `label_ids` | mmCIF/label chain IDs from the FASTA header |
+| `auth_ids` | Author-assigned chain IDs |
+| `nstd_monomer` | Whether non-standard monomers are present |
+| `is_polypeptide` | Whether mmCIF identifies the entity as a polypeptide |
+| `is_biological` | Whether it is considered biological by this script |
+| `description` | Protein description from the FASTA header |
+
+## How `is_biological` is calculated
+
+The script sets:
+
+```python
+is_biological = is_polypeptide and not inhibitory_flag
+```
+
+So an entry is marked `True` only when:
+
+1. The mmCIF entity is a polypeptide, and
+2. The FASTA description does not contain:
+   - `inhibitory protein`
+   - `inhibitory protien`
+
+Otherwise, it is marked `False`.
+
+## Example output
+
+For a matching FASTA and mmCIF entry, the CSV may contain:
+
+```csv
+pdb_id,entity_id,label_ids,auth_ids,nstd_monomer,is_polypeptide,is_biological,description
+1IWP,3,A,A,no,True,True,Some protein description
+```
+
+## In simple terms
+
+The script answers:
+
+> For each protein entity listed in the FASTA headers, which PDB structure and chains does it belong to, is it a polypeptide, does it contain non-standard monomers, and should it be considered biological?
+
+It skips malformed FASTA headers and FASTA entries for which a matching mmCIF file cannot be found.
+--------------------------------------------------------------------------------
+
+Turn 4
+[User]
+the label ids and auth ids which are present in the fasta header is it checking again those are same in the cif file 
+[Assistant]
+No. The script does **not** verify that `label_ids` and `auth_ids` from the FASTA header match the chains in the mmCIF file.
+
+In [fasta_mmcif_entity_chain_to_csv.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fasta_mmcif_entity_chain_to_csv.py):
+
+- `label_ids` and `auth_ids` are parsed directly from the FASTA header.
+- The mmCIF file is used only to look up the `entity_id` in `_entity_poly`.
+- It checks:
+  - Whether the entity is a polypeptide
+  - The `nstd_monomer` value
+
+The code does not compare the chain IDs against mmCIF categories such as:
+
+```text
+_atom_site.label_asym_id
+_atom_site.auth_asym_id
+_struct_asym.id
+```
+
+Therefore, the output CSV reports the chain IDs from the FASTA header without confirming them against the mmCIF file. A matching PDB ID and entity ID are required, but the chain IDs are not independently validated.
+--------------------------------------------------------------------------------
+
+Turn 5
+[User]
+what this cluster_cif.py code will do 
+[Assistant]
+[cluster_cif.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/cluster_cif.py) reads mmCIF files, extracts UniProt accessions, optionally filters them, and groups CIF files that contain the same UniProt accession set.
+
+## Inputs
+
+Run it with:
+
+```bash
+python cluster_cif.py
+```
+
+It asks for four inputs:
+
+```text
+Input CIF folder:
+Output folder:
+Optional PDB ID CSV:
+Optional entity summary CSV:
+```
+
+### 1. Input CIF folder
+
+A folder containing files such as:
+
+```text
+1ABC.cif
+2XYZ.cif
+```
+
+The script reads only `.cif` files directly inside this folder.
+
+### 2. Output folder
+
+The folder where these files will be created:
+
+```text
+cif_accession_clusters.json
+cif_file_accessions.csv
+cif_clusters.csv
+```
+
+### 3. Optional PDB ID CSV
+
+If provided, it must contain a column named:
+
+```csv
+pdb_id
+1ABC
+2XYZ
+```
+
+Only CIF files whose filename stem matches one of these PDB IDs are processed.
+
+Press Enter to process every CIF file.
+
+### 4. Optional entity summary CSV
+
+This is the CSV generated by the previous script, for example:
+
+```text
+entity_chain_summary.csv
+```
+
+It must contain:
+
+```text
+pdb_id
+entity_id
+is_biological
+```
+
+If supplied, only entities marked as biological are used for accession extraction.
+
+If no path is supplied, the script automatically checks whether this file exists:
+
+```text
+results/entity_chain_summary.csv
+```
+
+## What it extracts from each CIF file
+
+The script reads the mmCIF category:
+
+```text
+_struct_ref.
+```
+
+Specifically, it extracts:
+
+- `db_name`
+- `pdbx_db_accession`
+- `entity_id`
+
+It keeps only rows where:
+
+```text
+db_name == "UNP"
+```
+
+`UNP` means UniProt.
+
+For example, if the CIF contains:
+
+```text
+db_name: UNP
+pdbx_db_accession: P12345
+entity_id: 3
+```
+
+The script stores:
+
+```json
+{
+  "accession": "P12345",
+  "entity_id": "3"
+}
+```
+
+Duplicate accessions within the same CIF file are removed.
+
+If no UniProt accession is found, the file is marked as:
+
+```text
+NIL
+```
+
+## How clustering works
+
+Files are placed in the same cluster only when they have the exact same set of UniProt accessions.
+
+Example:
+
+```text
+1ABC.cif → P12345, Q67890
+2XYZ.cif → Q67890, P12345
+3AAA.cif → P12345
+```
+
+The result is:
+
+```text
+Cluster 1:
+  1ABC.cif
+  2XYZ.cif
+
+Cluster 2:
+  3AAA.cif
+```
+
+The order of accessions does not matter because the script sorts them before comparing.
+
+This is **not sequence clustering** and does not compare protein sequence similarity. It only compares the UniProt accession sets associated with each CIF file.
+
+## Output files
+
+### `cif_accession_clusters.json`
+
+Detailed JSON output containing:
+
+- Total number of files
+- Number of files with accessions
+- Number of clusters
+- Files in each cluster
+- Accessions in each cluster
+- Entity IDs associated with each accession
+
+### `cif_file_accessions.csv`
+
+One row per CIF file, including:
+
+- CIF filename
+- Total entity count
+- Total entity IDs
+- Number of entities with accessions
+- Entity IDs associated with accessions
+- UniProt accession count
+- UniProt accessions
+- Entity IDs
+
+### `cif_clusters.csv`
+
+One row per cluster:
+
+```csv
+cluster_id,file_count,accession_count,files,accessions
+```
+
+Example:
+
+```csv
+1,2,2,1ABC.cif;2XYZ.cif,P12345;Q67890
+```
+
+## Overall purpose
+
+The script answers:
+
+> Which CIF structures are associated with the same UniProt protein or combination of proteins?
+
+It is useful for grouping structural files based on their UniProt annotations while optionally restricting the analysis to selected PDB IDs and biological entities.
+--------------------------------------------------------------------------------
+
+Turn 6
+[User]
+what is the pdb id csv as input 
+[Assistant]
+The **PDB ID CSV** is an optional filter file. It tells `cluster_cif.py` which CIF files should be processed.
+
+It must contain a column named exactly:
+
+```csv
+pdb_id
+```
+
+Example:
+
+```csv
+pdb_id
+1ABC
+2XYZ
+3DEF
+```
+
+If your CIF folder contains:
+
+```text
+1ABC.cif
+2XYZ.cif
+3DEF.cif
+4GHI.cif
+```
+
+Only these files are processed:
+
+```text
+1ABC.cif
+2XYZ.cif
+3DEF.cif
+```
+
+`4GHI.cif` is ignored.
+
+The script matches each `pdb_id` with the CIF filename without the `.cif` extension:
+
+```text
+1ABC.cif → 1ABC
+```
+
+This CSV does not need accession or protein information. It only needs the list of PDB IDs.
+
+If you press Enter without providing this file, the script processes all `.cif` files in the input folder.
+--------------------------------------------------------------------------------
+
+Turn 7
+[User]
+how the entity summary csv file will useful
+[Assistant]
+The **entity summary CSV** helps `cluster_cif.py` identify which entities in each PDB structure are biological protein entities.
+
+It is typically produced by:
+
+[fasta_mmcif_entity_chain_to_csv.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fasta_mmcif_entity_chain_to_csv.py)
+
+It should contain columns such as:
+
+```csv
+pdb_id,entity_id,is_biological
+1ABC,1,True
+1ABC,2,False
+2XYZ,1,True
+```
+
+## How `cluster_cif.py` uses it
+
+### 1. Filters out non-biological entities
+
+Suppose `1ABC.cif` contains UniProt accessions for:
+
+```text
+Entity 1 → P12345
+Entity 2 → Q67890
+```
+
+But the summary says:
+
+```csv
+pdb_id,entity_id,is_biological
+1ABC,1,True
+1ABC,2,False
+```
+
+Then only `P12345` is used for clustering. The accession from entity 2 is excluded.
+
+### 2. Adds entity statistics to the output
+
+The output CSV includes:
+
+```text
+total_entity_count
+total_entity_ids
+accession_entity_count
+accession_entity_ids
+```
+
+For the example above, it may report:
+
+```text
+total_entity_count: 2
+total_entity_ids: 1;2
+accession_entity_count: 1
+accession_entity_ids: 1
+```
+
+### 3. Prevents unwanted clustering
+
+Without the entity summary, UniProt accessions belonging to inhibitory proteins, non-biological components, or other excluded entities could cause CIF files to be grouped together incorrectly.
+
+## If you do not provide it
+
+The script still extracts all `UNP` accessions from the mmCIF files, but:
+
+- It does not filter by `is_biological`.
+- Entity counts may be shown as zero or empty.
+- All UniProt-linked entities can participate in clustering.
+
+The CSV filename itself is not important, but it must contain the columns:
+
+```text
+pdb_id
+entity_id
+is_biological
+```
+--------------------------------------------------------------------------------
+
+Turn 8
+[User]
+Therefore, the output CSV reports the chain IDs from the FASTA header without confirming them against the mmCIF file. A matching PDB ID and entity ID are required, but the chain IDs are not independently validated.
+Then how it know that the entity id is is polypeptide and is biologically  true 
+[Assistant]
+The script determines `is_polypeptide` and `is_biological` using the **entity ID**, not the chain IDs.
+
+In [fasta_mmcif_entity_chain_to_csv.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fasta_mmcif_entity_chain_to_csv.py), the process is:
+
+### 1. Read the entity ID from the FASTA header
+
+Example:
+
+```text
+>1ABC_3|Chains A|Protein description
+```
+
+The script extracts:
+
+```text
+PDB ID = 1ABC
+Entity ID = 3
+```
+
+### 2. Find entity ID `3` in the mmCIF file
+
+It looks in the mmCIF category:
+
+```text
+_entity_poly.
+```
+
+Specifically, it searches the `entity_id` column.
+
+Example mmCIF information:
+
+```text
+entity_id: 3
+type: polypeptide(L)
+nstd_monomer: no
+```
+
+### 3. Determine `is_polypeptide`
+
+The script checks whether the mmCIF `type` contains the word:
+
+```text
+polypeptide
+```
+
+Therefore:
+
+```python
+is_polypeptide = "polypeptide" in poly_type.lower()
+```
+
+For:
+
+```text
+polypeptide(L)
+```
+
+the result is:
+
+```text
+is_polypeptide = True
+```
+
+### 4. Determine `is_biological`
+
+The script also examines the description from the FASTA header.
+
+It marks an entry as non-biological if the description contains:
+
+```text
+inhibitory protein
+```
+
+or:
+
+```text
+inhibitory protien
+```
+
+Then it calculates:
+
+```python
+is_biological = is_polypeptide and not inhibitory_flag
+```
+
+So the logic is:
+
+| Is mmCIF type polypeptide? | Description contains inhibitory phrase? | `is_biological` |
+|---|---|---|
+| Yes | No | `True` |
+| Yes | Yes | `False` |
+| No | No | `False` |
+| No | Yes | `False` |
+
+### Important point
+
+The chain IDs are not involved in this decision.
+
+The script only needs:
+
+- PDB ID from the FASTA header to find the mmCIF file
+- Entity ID from the FASTA header to find the corresponding `_entity_poly` record
+- `type` from mmCIF to identify polypeptides
+- FASTA description to exclude inhibitory proteins
+
+If the entity ID is not found in the mmCIF file, the default is:
+
+```python
+is_polypeptide = False
+nstd_monomer = "no"
+```
+
+Therefore, `is_biological` will also be `False`.
+--------------------------------------------------------------------------------
+
+Turn 9
+[User]
+what this code will do 
+[Assistant]
+[gemi_script.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/gemi_script.py) checks the biological protein chains listed in an entity summary CSV against their actual atoms in mmCIF files.
+
+## Inputs
+
+Run from the command line:
+
+```bash
+python gemi_script.py summary.csv cif_folder output.csv
+```
+
+Example:
+
+```bash
+python gemi_script.py \
+  results/entity_chain_summary.csv \
+  data/cif \
+  results/gemi_output.csv
+```
+
+It expects:
+
+1. **Summary CSV**
+   - Usually generated by `fasta_mmcif_entity_chain_to_csv.py`
+   - Must contain at least:
+     - `pdb_id`
+     - `entity_id`
+     - `label_ids`
+     - `is_biological`
+
+2. **CIF directory**
+   - Contains files such as:
+     ```text
+     1ABC.cif
+     2XYZ.cif
+     ```
+
+3. **Optional output CSV**
+   - Defaults to:
+     ```text
+     gemi_output.csv
+     ```
+
+If command-line arguments are not supplied, the script asks for these paths interactively.
+
+## Processing steps
+
+### 1. Keeps only biological entities
+
+Rows where:
+
+```text
+is_biological = True
+```
+
+are processed.
+
+Rows marked `False` are skipped.
+
+### 2. Finds the mmCIF file
+
+For each row, it uses the `pdb_id` to locate the corresponding CIF file.
+
+For example:
+
+```text
+pdb_id = 1ABC
+```
+
+It searches for:
+
+```text
+1ABC.cif
+1abc.cif
+1ABC.cif.gz
+```
+
+### 3. Uses the label chain IDs
+
+It reads the `label_ids` column.
+
+Example:
+
+```text
+label_ids = A,B
+```
+
+It processes chains `A` and `B` separately.
+
+The script uses `label_ids`, not `auth_ids`.
+
+### 4. Confirms chain and entity in the mmCIF
+
+It reads the `_atom_site` table and searches for rows where both match:
+
+```text
+_atom_site.label_entity_id == entity_id
+_atom_site.label_asym_id == chain_id
+```
+
+For example:
+
+```text
+entity_id = 3
+chain_id = A
+```
+
+It looks for atoms belonging to entity `3` and label chain `A`.
+
+This is where the chain and entity information is actually validated against the mmCIF file.
+
+## Details extracted
+
+For each valid biological chain, it records:
+
+### `start_position`
+
+The smallest observed residue number.
+
+### `end_position`
+
+The largest observed residue number.
+
+### `non_standard_residues`
+
+Non-standard residues found as `HETATM`, excluding water `HOH`.
+
+Example:
+
+```text
+MSE:10;SEP:45
+```
+
+### `no_internal_missing`
+
+This is `True` when all integer residue positions between the first and last observed positions are present.
+
+Example:
+
+```text
+Observed: 1, 2, 3, 4, 5
+```
+
+Result:
+
+```text
+True
+```
+
+But:
+
+```text
+Observed: 1, 2, 4, 5
+```
+
+Result:
+
+```text
+False
+```
+
+### `has_insertion_code`
+
+This is `True` if the mmCIF contains insertion codes such as:
+
+```text
+10A
+10B
+```
+
+## Output CSV
+
+The default output contains:
+
+```csv
+pdb_id,entity_id,chain_id,start_position,end_position,non_standard_residues,no_internal_missing,has_insertion_code
+```
+
+Example:
+
+```csv
+1ABC,3,A,5,220,MSE:45,True,False
+```
+
+## Log file
+
+The script also creates a log file beside the output:
+
+```text
+gemi_output.log
+```
+
+It records:
+
+- Missing CIF files
+- Chains with no matching atoms
+- Successfully processed chains
+- Residue ranges
+
+## Important limitation
+
+The script does **not** extract the amino-acid sequence itself. It extracts structural residue-position information and checks whether atoms exist for the requested entity and label chain.
+--------------------------------------------------------------------------------
+
+Turn 10
+[User]
+let suppose what if one pdb have one entity id and having more chains it is homopolymer which chain it will check
+[Assistant]
+If one PDB has one entity ID with multiple chains, `gemi_script.py` checks **every chain listed in the `label_ids` column**.
+
+Example summary CSV:
+
+```csv
+pdb_id,entity_id,label_ids,is_biological
+1ABC,1,A,B,C,True
+```
+
+Conceptually, for entity `1`, it processes:
+
+```text
+Entity 1 + Chain A
+Entity 1 + Chain B
+Entity 1 + Chain C
+```
+
+For each chain, it searches the mmCIF `_atom_site` table for matching:
+
+```text
+_atom_site.label_entity_id = 1
+_atom_site.label_asym_id = A
+```
+
+Then it repeats for chains `B` and `C`.
+
+The output contains one row per chain:
+
+```csv
+pdb_id,entity_id,chain_id,start_position,end_position,...
+1ABC,1,A,1,300,...
+1ABC,1,B,1,300,...
+1ABC,1,C,1,300,...
+```
+
+For a homopolymer, the chains may have the same sequence, but the script does not compare sequences. It treats them as separate structural chains and independently checks:
+
+- Observed residue positions
+- Missing internal positions
+- Non-standard residues
+- Insertion codes
+
+The important condition is that `label_ids` must contain all relevant chains. If the summary CSV contains only:
+
+```text
+label_ids = A
+```
+
+then only chain `A` will be checked, even if chains `B` and `C` exist in the CIF file. The script does not automatically discover additional chains for the entity.
+--------------------------------------------------------------------------------
+
+Turn 11
+[User]
+so what is the summary of this code 
+[Assistant]
+[gemi_script.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/gemi_script.py) checks biological protein chains from a summary CSV against their corresponding mmCIF structures.
+
+### Summary
+
+1. Reads a summary CSV containing:
+   - PDB ID
+   - Entity ID
+   - Label chain IDs
+   - Biological status
+
+2. Processes only rows where:
+
+   ```text
+   is_biological = True
+   ```
+
+3. Finds the matching `.cif` file for each PDB ID.
+
+4. Checks every chain listed in `label_ids`.
+
+5. Confirms each chain/entity combination using:
+
+   ```text
+   _atom_site.label_entity_id
+   _atom_site.label_asym_id
+   ```
+
+6. Extracts:
+   - First and last observed residue positions
+   - Non-standard residues
+   - Whether internal residue positions are missing
+   - Whether insertion codes exist
+
+7. Writes:
+   - A results CSV, usually `gemi_output.csv`
+   - A processing log, usually `gemi_output.log`
+
+### In simple terms
+
+It verifies whether the biological chains recorded in the summary CSV are actually present in the mmCIF files and reports the residue completeness and special-residue information for each chain.
+
+It does not compare protein sequences or automatically discover chains that are missing from `label_ids`.
+--------------------------------------------------------------------------------
+
+Turn 12
+[User]
+/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_all_accessions.py,/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_single_accession_clusters.py,/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/split_single_multi_entity.py
+explain all this codes and is there any similarity in between these codes
+[Assistant]
+These three scripts are related preprocessing tools, but they perform different tasks.
+
+## 1. `extract_all_accessions.py`
+
+File: [extract_all_accessions.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_all_accessions.py)
+
+### Input
+
+A CSV containing an `accessions` column:
+
+```csv
+file,accessions
+1ABC.cif,P12345;Q67890
+2XYZ.cif,P12345
+```
+
+### What it does
+
+- Reads all values from `accessions`
+- Splits values separated by `;`
+- Removes duplicates
+- Ignores:
+  - Empty values
+  - `NIL`
+  - `.`
+  - `?`
+
+### Output
+
+A text file with one unique UniProt accession per line:
+
+```text
+P12345
+Q67890
+```
+
+### Purpose
+
+Creates a complete list of all UniProt accessions found in a CSV.
+
+---
+
+## 2. `extract_single_accession_clusters.py`
+
+File: [extract_single_accession_clusters.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_single_accession_clusters.py)
+
+### Input
+
+A cluster CSV, usually:
+
+```text
+cif_clusters.csv
+```
+
+This file is generated by `cluster_cif.py` and contains:
+
+```csv
+cluster_id,file_count,accession_count,files,accessions
+1,5,1,1ABC.cif;2XYZ.cif,P12345
+2,2,2,3AAA.cif;4BBB.cif,P12345;Q67890
+```
+
+### What it does
+
+- Selects only rows where:
+  
+  ```text
+  accession_count == 1
+  ```
+
+- Extracts the accession from the `accessions` column
+- Writes one accession per line
+
+### Output
+
+```text
+P12345
+```
+
+### Purpose
+
+Finds clusters associated with exactly one UniProt accession.
+
+It does not extract every accession. It extracts only accessions from single-accession clusters.
+
+---
+
+## 3. `split_single_multi_entity.py`
+
+File: [split_single_multi_entity.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/split_single_multi_entity.py)
+
+### Input
+
+An entity summary CSV, usually generated by:
+
+```text
+fasta_mmcif_entity_chain_to_csv.py
+```
+
+It requires:
+
+```text
+pdb_id
+entity_id
+is_biological
+```
+
+Example:
+
+```csv
+pdb_id,entity_id,is_biological
+1ABC,1,True
+1ABC,2,False
+2XYZ,1,True
+3DEF,1,True
+3DEF,2,True
+```
+
+### Classification logic
+
+A PDB is classified as **single entity** if:
+
+- It has one or fewer distinct entity IDs, or
+- It has only one biological entity
+
+It is classified as **multiple entity** only if:
+
+- It has more than one distinct entity ID, and
+- More than one entity is marked biological
+
+### Outputs
+
+```text
+single_entity_pdb_ids.csv
+multiple_entity_pdb_ids.csv
+```
+
+Example:
+
+```csv
+pdb_id
+1ABC
+2XYZ
+```
+
+and:
+
+```csv
+pdb_id
+3DEF
+```
+
+---
+
+## Similarities
+
+All three scripts:
+
+- Read CSV files
+- Validate required input columns or files
+- Clean and filter data
+- Write processed results to new files
+- Are used for protein/PDB preprocessing
+- Preserve or organize identifiers such as PDB IDs, entity IDs, and UniProt accessions
+
+## Main differences
+
+| Script | Main purpose | Input | Output |
+|---|---|---|---|
+| `extract_all_accessions.py` | Extract all unique accessions | CIF accession CSV | One accession list |
+| `extract_single_accession_clusters.py` | Extract accessions from single-accession clusters | Cluster CSV | One accession list |
+| `split_single_multi_entity.py` | Separate PDBs by entity complexity | Entity summary CSV | Single- and multi-entity PDB lists |
+
+## How they can fit together
+
+A possible workflow is:
+
+```text
+FASTA + mmCIF
+      |
+      v
+entity_chain_summary.csv
+      |
+      +--> split_single_multi_entity.py
+      |       |
+      |       +--> single_entity_pdb_ids.csv
+      |       +--> multiple_entity_pdb_ids.csv
+      |
+      v
+cluster_cif.py
+      |
+      +--> cif_file_accessions.csv
+      +--> cif_clusters.csv
+      |
+      +--> extract_all_accessions.py
+      +--> extract_single_accession_clusters.py
+```
+
+In short:
+
+- `split_single_multi_entity.py` classifies structures by entity composition.
+- `extract_all_accessions.py` creates a complete accession list.
+- `extract_single_accession_clusters.py` creates a restricted accession list containing only clusters with one accession.
+--------------------------------------------------------------------------------
+
+Turn 13
+[User]
+I think split_single_multi_entity.py is better option than extract_single_accession_clusters.py because extract accessions from single accession cluster it is not meant of that pdb has only single chain or homopolymer there might be homopolymer with more than one accessions because some chains are bind with two different proteins 
+[Assistant]
+Your reasoning is mostly correct, but the two scripts answer different questions.
+
+### `extract_single_accession_clusters.py`
+
+It asks:
+
+> Does this CIF cluster contain only one unique UniProt accession?
+
+A cluster with:
+
+```text
+P12345
+```
+
+could still represent:
+
+- Multiple chains of the same protein
+- A homopolymer
+- Multiple entities linked to the same UniProt accession
+- Several copies of one protein in a complex
+
+It does **not** prove that the PDB contains only one chain or one entity.
+
+If a structure contains:
+
+```text
+Entity 1 → P12345
+Entity 2 → Q67890
+```
+
+then it has two accessions and will be excluded, even if the structure is biologically relevant.
+
+### `split_single_multi_entity.py`
+
+It asks:
+
+> Does this PDB contain one or multiple biological entities?
+
+Its logic is:
+
+```text
+single:
+    one entity
+    OR only one biological entity
+
+multi:
+    more than one entity
+    AND more than one biological entity
+```
+
+Therefore, it is better when your goal is to classify structures based on their biological entity composition rather than simply counting UniProt accessions.
+
+### Important limitation
+
+`split_single_multi_entity.py` does not count chains. A PDB with:
+
+```text
+Entity 1 → Chains A, B, C
+```
+
+is still classified as a single-entity PDB, even though it has three chains.
+
+Also, a PDB with:
+
+```text
+Entity 1 → P12345
+Entity 2 → P12345
+```
+
+may be classified as multi-entity because it has two entity IDs, even though both entities use the same accession.
+
+### Recommendation
+
+Use:
+
+```text
+split_single_multi_entity.py
+```
+
+if you want to separate PDBs by biological entity composition.
+
+Use:
+
+```text
+extract_single_accession_clusters.py
+```
+
+only if your specific goal is to find structures or clusters containing exactly one unique UniProt accession.
+
+For distinguishing:
+
+- Single chain
+- Homopolymer
+- Multiple copies of the same protein
+- Complexes containing different proteins
+
+you would need an additional chain/entity-aware classification step.
+--------------------------------------------------------------------------------
+
+Turn 14
+[User]
+In this code anything is checking about biological filter before clustering
+[Assistant]
+Yes. [cluster_cif.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/cluster_cif.py) can apply a biological filter **before clustering**, but only when an entity summary CSV is supplied or automatically found.
+
+### Processing order
+
+For each CIF file:
+
+1. Extract UniProt accessions and entity IDs from `_struct_ref`.
+2. Load biological entity IDs from the summary CSV.
+3. Keep only accessions whose `entity_id` is marked biological.
+4. Remove files with no remaining accession.
+5. Cluster the remaining files based on their accession sets.
+
+The filtering happens here conceptually:
+
+```python
+filtered = [
+    d for d in extracted
+    if d.get("entity_id") in allowed_entities
+]
+```
+
+The clustering occurs afterward:
+
+```python
+clusters = build_clusters(file_to_accessions_filtered)
+```
+
+### Example
+
+Entity summary:
+
+```csv
+pdb_id,entity_id,is_biological
+1ABC,1,True
+1ABC,2,False
+```
+
+CIF accessions:
+
+```text
+Entity 1 → P12345
+Entity 2 → Q67890
+```
+
+After biological filtering:
+
+```text
+1ABC → P12345
+```
+
+`Q67890` is excluded before clustering.
+
+### Important limitations
+
+- The filter uses `entity_id`, not chain IDs.
+- If no entity summary CSV is provided, all UniProt accessions are used.
+- The script automatically checks for:
+
+  ```text
+  results/entity_chain_summary.csv
+  ```
+
+- A CIF is filtered only when the summary contains biological entities for that PDB.
+- If all entities for a PDB are marked non-biological, the current code may not apply the filter because that PDB has no entry in `biological_map`; this is a subtle edge case.
+
+So, yes: biological filtering is intended to happen before clustering, but it depends on the entity summary CSV being available and correctly matched by PDB ID and entity ID.
+--------------------------------------------------------------------------------
+
+Turn 15
+[User]
+I changed the extract_accession function here
+[Assistant]
+Your change modifies `extract_accessions()` so it now keeps the same UniProt accession separately when it belongs to different entity IDs.
+
+### Previous behavior
+
+The code removed duplicate accessions globally within one CIF file:
+
+```text
+Entity 1 → P12345
+Entity 2 → P12345
+```
+
+Result:
+
+```json
+[
+  {"accession": "P12345", "entity_id": "1"}
+]
+```
+
+Entity 2 was lost.
+
+### New behavior
+
+The code now treats the pair:
+
+```python
+(accession, entity_id)
+```
+
+as unique.
+
+For:
+
+```text
+Entity 1 → P12345
+Entity 2 → P12345
+```
+
+the result becomes:
+
+```json
+[
+  {"accession": "P12345", "entity_id": "1"},
+  {"accession": "P12345", "entity_id": "2"}
+]
+```
+
+This is better for preserving entity-level information and for biological filtering.
+
+### Important downstream behavior
+
+The entity information is preserved in:
+
+- `cif_accession_clusters.json`
+- `cif_file_accessions.csv`
+- `entity_ids`
+- `accessions_data`
+
+However, clustering still uses only unique accession names:
+
+```python
+accession_key = tuple(sorted(set(accession_strings)))
+```
+
+Therefore:
+
+```text
+Entity 1 → P12345
+Entity 2 → P12345
+```
+
+still produces:
+
+```text
+accession_count = 1
+```
+
+for clustering purposes.
+
+So the change means:
+
+- **Entity-level records:** preserved separately
+- **Cluster grouping:** still based only on unique accession sets
+- **Same accession across multiple entities:** does not create multiple clusters
+- **Biological filtering:** can now correctly retain or remove each entity separately
+
+This is a useful change if you want to distinguish multiple entities that share the same UniProt accession while continuing to cluster structures by their unique accession combinations.
+--------------------------------------------------------------------------------
+
+Turn 16
+[User]
+Instead of the logic present in the split_single_multi_entity.py we can use the logic present in the pasted image
+[Assistant]
+Implemented the image-based classification directly in [cluster_cif.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/cluster_cif.py).
+
+It now classifies each PDB after biological filtering using unique UniProt accessions:
+
+- `1` unique accession → `homopolymer_pdb_ids.csv`
+- `2+` unique accessions → `heteropolymer_pdb_ids.csv`
+- `0` accessions or `NIL` → `unmapped_pdb_ids.csv`
+
+The existing outputs remain unchanged:
+
+- `cif_accession_clusters.json`
+- `cif_file_accessions.csv`
+- `cif_clusters.csv`
+
+Classification preserves multiple entities sharing the same accession, but counts unique accession IDs for deciding homopolymer versus heteropolymer.
+
+Syntax and classification behavior were verified successfully.
+--------------------------------------------------------------------------------
+
+Turn 17
+[User]
+**
+# Cluster_cif.py:
+Reads mmCIF files, extracts uniprot accessions, optionally filters them, and groups CIF files that contain the same Uniprot accession set.
+
+INPUTS:
+
+1. CIF folder path
+2. Output folder path
+3. Optional PDB ID CSV file so that the processing is restricted to only ids which present in the CSV.
+4. Optional entity summary CSV file that was generated by fasta_mmcif_entity_chain_to_csv.py, so it will skip the accession ids of chains that are not really biological polypeptides.
+
+OUTPUTS:
+
+1. Cif_accession_clusters.json
+2. Cif_file_accessions.csv
+3. Cif_clusters.csv
+now what else should add in this text 
+[Assistant]
+You should add these important details to the description of [cluster_cif.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/cluster_cif.py).
+
+## Additional processing details
+
+- Only `.cif` files directly inside the input folder are processed.
+- UniProt accessions are read from the mmCIF `_struct_ref` category.
+- Only records with `db_name = UNP` are retained.
+- Each `(UniProt accession, entity ID)` pair is preserved.
+- Duplicate accession/entity pairs within one CIF file are removed.
+- Files without UniProt accessions are marked as `NIL`.
+- Clustering is based on the exact set of unique UniProt accessions.
+- This is not sequence or structural similarity clustering.
+
+## Biological filtering
+
+When the entity summary CSV is provided:
+
+- Only entities with `is_biological = True` are retained.
+- Non-biological entities are removed before clustering.
+- If filtering removes all accessions from a CIF file, it is classified as unmapped.
+- If no summary CSV is provided, biological filtering is skipped.
+- If no path is supplied, the script automatically checks for:
+
+```text
+results/entity_chain_summary.csv
+```
+
+## Additional outputs
+
+The script now also creates:
+
+4. `homopolymer_pdb_ids.csv`  
+   PDB IDs with exactly one unique UniProt accession after biological filtering.
+
+5. `heteropolymer_pdb_ids.csv`  
+   PDB IDs with two or more unique UniProt accessions after biological filtering.
+
+6. `unmapped_pdb_ids.csv`  
+   PDB IDs with no usable UniProt accession, including `NIL` entries.
+
+Each of these files contains:
+
+```csv
+pdb_id
+```
+
+## Output descriptions
+
+- **`cif_accession_clusters.json`**  
+  Detailed JSON containing clusters, files, accessions, entity IDs, and summary counts.
+
+- **`cif_file_accessions.csv`**  
+  One row per CIF file, containing accessions, entity IDs, total entities, and biological accession entity information.
+
+- **`cif_clusters.csv`**  
+  One row per cluster, containing cluster ID, file count, accession count, files, and accessions.
+
+## Dependency
+
+The script requires the `gemmi` Python package:
+
+```bash
+pip install gemmi
+```
+
+You can also add a short definition:
+
+> Here, “homopolymer” means one unique UniProt accession after biological filtering. It does not necessarily mean that the structure contains only one physical chain.
+--------------------------------------------------------------------------------
+
+Turn 18
+[User]
+now what this fetch_fasta.py will do 
+[Assistant]
+[fetch_fasta.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fetch_fasta.py) downloads FASTA protein sequences from UniProt for a list of accession IDs.
+
+## Inputs
+
+Run:
+
+```bash
+python fetch_fasta.py
+```
+
+It asks for:
+
+```text
+Path to UniProt IDs txt file:
+Output FASTA path to write combined sequences:
+Optional NCBI Taxonomy ID to filter:
+```
+
+### UniProt ID input
+
+A text file with one accession per line:
+
+```text
+P12345
+Q67890
+A11111
+```
+
+Blank lines, comments beginning with `#`, and duplicate IDs are ignored.
+
+### Optional taxonomy ID
+
+For example:
+
+```text
+573
+```
+
+This can restrict secondary-accession searches to a particular organism. Press Enter to skip the filter.
+
+## How each accession is searched
+
+For every ID, it tries three fallback methods:
+
+1. Direct UniProtKB entry:
+
+```text
+https://rest.uniprot.org/uniprotkb/{ID}.fasta
+```
+
+2. Secondary/merged accession search:
+
+```text
+/uniprotkb/stream?query=sec_acc:{ID}
+```
+
+With taxonomy filtering, it adds:
+
+```text
+AND taxonomy_id:{tax_id}
+```
+
+3. UniParc archive search:
+
+```text
+/uniparc/stream?query={ID}&format=fasta
+```
+
+Each endpoint can be retried up to three times for network errors, rate limits, and server errors.
+
+## FASTA processing
+
+If multiple FASTA records are returned, the script keeps only the first complete FASTA record.
+
+It also modifies the header by adding the queried accession:
+
+```text
+>P12345 | original UniProt FASTA header
+```
+
+It processes each chain or accession separately and writes one result per input ID.
+
+## Outputs
+
+### Combined FASTA file
+
+The requested output file contains all successfully downloaded sequences.
+
+Example:
+
+```text
+proteins.fasta
+```
+
+### Failed accession file
+
+Failed IDs are written to:
+
+```text
+failed_uniprot_ids.txt
+```
+
+This file is created in the same directory as the output FASTA file.
+
+## Overall purpose
+
+The script converts a list of UniProt accessions into a combined FASTA file while handling:
+
+- Duplicate IDs
+- Obsolete or secondary accessions
+- UniParc fallback
+- Temporary server failures
+- Optional taxonomy filtering
+- Failed-download tracking
+--------------------------------------------------------------------------------
+
+Turn 19
+[User]
+so the input files are generated from the cluster.py so that it will extract those uniprot ids fasta seq for further analysis
+[Assistant]
+Yes, that is the intended workflow, but `fetch_fasta.py` requires a **plain text file of UniProt accession IDs**, not the cluster CSV directly.
+
+Recommended workflow:
+
+```text
+mmCIF files
+    |
+    v
+cluster_cif.py
+    |
+    +--> cif_file_accessions.csv
+    +--> cif_clusters.csv
+    +--> homopolymer_pdb_ids.csv
+    +--> heteropolymer_pdb_ids.csv
+    +--> unmapped_pdb_ids.csv
+    |
+    v
+extract_all_accessions.py
+    |
+    v
+all_accessions.txt
+    |
+    v
+fetch_fasta.py
+    |
+    v
+protein_sequences.fasta
+```
+
+### Example commands
+
+First run `cluster_cif.py`.
+
+Then use `extract_all_accessions.py` with:
+
+```text
+Input CIF accession CSV:
+results/cif_file_accessions.csv
+
+Output TXT:
+results/all_accessions.txt
+```
+
+This creates:
+
+```text
+results/all_accessions.txt
+```
+
+Then run `fetch_fasta.py`:
+
+```text
+Path to UniProt IDs txt file:
+results/all_accessions.txt
+
+Output FASTA path:
+results/protein_sequences.fasta
+```
+
+The result is a combined FASTA file containing the UniProt sequences associated with the biologically filtered CIF entities.
+
+### Important point
+
+The following files contain **PDB IDs**, not UniProt accessions:
+
+```text
+homopolymer_pdb_ids.csv
+heteropolymer_pdb_ids.csv
+unmapped_pdb_ids.csv
+```
+
+Therefore, they cannot be given directly to `fetch_fasta.py`. The file used by `fetch_fasta.py` must contain values such as:
+
+```text
+P12345
+Q67890
+A11111
+```
+--------------------------------------------------------------------------------
+
+Turn 20
+[User]
+what this extract all accessions .py will do
+[Assistant]
+[extract_all_accessions.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_all_accessions.py) extracts all unique UniProt accession IDs from a CSV file and writes them into a text file.
+
+## Input
+
+It expects a CSV containing an `accessions` column, such as:
+
+```csv
+file,accessions
+1ABC.cif,P12345;Q67890
+2XYZ.cif,P12345
+3DEF.cif,A11111
+```
+
+## Processing
+
+It:
+
+- Reads the `accessions` column
+- Splits multiple accessions separated by `;`
+- Removes duplicates
+- Ignores empty values
+- Ignores `NIL`, `.`, and `?`
+- Preserves the order of first occurrence
+
+## Output
+
+It creates a text file like:
+
+```text
+P12345
+Q67890
+A11111
+```
+
+This text file is then used as input for [fetch_fasta.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fetch_fasta.py), which downloads the corresponding UniProt FASTA sequences.
+
+The script only extracts accession IDs; it does not download sequences or read the CIF files directly.
+--------------------------------------------------------------------------------
+
+Turn 21
+[User]
+so the output files those are generated by the cluster.py have only pdb ids in **homopolymer_pdb_ids.csv** so we need to provide cif_clusters.csv and homopolymer_pdb_ids.csv to the extract_all_accessions so that it will generate the txt files
+[Assistant]
+Not exactly.
+
+`extract_all_accessions.py` accepts **one CSV input at a time**. Also:
+
+- `homopolymer_pdb_ids.csv` contains only `pdb_id`
+- It does not contain an `accessions` column
+- Therefore, it cannot be used directly by `extract_all_accessions.py`
+
+The best source is:
+
+```text
+cif_file_accessions.csv
+```
+
+because it contains both CIF filenames/PDB-related data and UniProt accessions.
+
+### Current options
+
+#### All accessions
+
+Use:
+
+```text
+cif_file_accessions.csv
+```
+
+This generates a text file containing accessions from all processed CIF files.
+
+#### Only homopolymer accessions
+
+You first need to filter `cif_file_accessions.csv` using the PDB IDs in:
+
+```text
+homopolymer_pdb_ids.csv
+```
+
+Then pass the filtered CSV to `extract_all_accessions.py`.
+
+The workflow should be:
+
+```text
+cluster_cif.py
+    |
+    +--> cif_file_accessions.csv
+    +--> homopolymer_pdb_ids.csv
+    |
+    v
+Filter cif_file_accessions.csv
+using homopolymer_pdb_ids.csv
+    |
+    v
+homopolymer_accessions.csv
+    |
+    v
+extract_all_accessions.py
+    |
+    v
+homopolymer_accessions.txt
+    |
+    v
+fetch_fasta.py
+```
+
+`cif_clusters.csv` contains accession information, but it is organized by cluster rather than directly by PDB ID. It is not the simplest input for selecting only the homopolymer PDBs.
+--------------------------------------------------------------------------------
+
+Turn 22
+[User]
+I want to extract the homopolymers accessions and heteropolymer accession in separate text file then so where will add that logic and in the txt file there should not be have duplicates 
+[Assistant]
+
+--------------------------------------------------------------------------------
+
+Turn 23
+[User]
+I think better to add respective accession ids with respective to pdb id in separate column when running the cluster_cif.py then we can extract the accessions from the csv by deduplicating
+[Assistant]
+Yes, that is a better design.
+
+Instead of writing only:
+
+```csv
+pdb_id
+1ABC
+2XYZ
+```
+
+`cluster_cif.py` should write:
+
+### `homopolymer_pdb_ids.csv`
+
+```csv
+pdb_id,accessions
+1ABC,P12345
+2XYZ,Q67890
+```
+
+### `heteropolymer_pdb_ids.csv`
+
+```csv
+pdb_id,accessions
+3AAA,P12345;Q67890
+4BBB,A11111;B22222
+```
+
+### Why this is better
+
+- Keeps each PDB linked to its UniProt accession(s)
+- Uses the accessions after biological filtering
+- Avoids matching PDB IDs back to another CSV
+- Preserves the relationship between structure and accession
+- Allows `extract_all_accessions.py` to read either file directly
+- Duplicate accessions can be removed within each output file
+
+The accessions should be collected using a set:
+
+```python
+pdb_to_accessions[pdb_id].update(unique_accessions)
+```
+
+Then written in sorted order:
+
+```text
+P12345
+Q67890
+```
+
+`extract_all_accessions.py` already supports an `accessions` column and splits values separated by semicolons, so the workflow becomes:
+
+```text
+cluster_cif.py
+    |
+    +--> homopolymer_pdb_ids.csv
+    +--> heteropolymer_pdb_ids.csv
+    |
+    v
+extract_all_accessions.py
+    |
+    +--> homopolymer_accessions.txt
+    +--> heteropolymer_accessions.txt
+    |
+    v
+fetch_fasta.py
+```
+
+The existing `cif_file_accessions.csv` already contains related information, but adding the `accessions` column to the homopolymer and heteropolymer files makes the downstream analysis clearer and prevents PDB/accession mismatch errors.
+--------------------------------------------------------------------------------
+
+Turn 24
+[User]
+then go head do it 
+[Assistant]
+Updated [cluster_cif.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/cluster_cif.py).
+
+Now the classification CSVs contain accession columns:
+
+```csv
+pdb_id,accessions
+1ABC,P12345
+2XYZ,Q67890
+```
+
+For heteropolymers:
+
+```csv
+pdb_id,accessions
+3AAA,P12345;Q67890
+```
+
+Changes:
+
+- Accessions are linked to their PDB IDs.
+- Duplicate accessions within each PDB are removed.
+- Accessions are sorted for consistent output.
+- `unmapped_pdb_ids.csv` contains blank accession values.
+- Existing cluster outputs remain unchanged.
+
+You can now run [extract_all_accessions.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_all_accessions.py) separately on:
+
+```text
+homopolymer_pdb_ids.csv → homopolymer_accessions.txt
+heteropolymer_pdb_ids.csv → heteropolymer_accessions.txt
+```
+
+Those text files can then be supplied to [fetch_fasta.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fetch_fasta.py).
+--------------------------------------------------------------------------------
+
+Turn 25
+[User]
+now next step is after extracting the fasta files by using fetch_fasta.py those fasta files used as query for blast against ref_db blast right for that these two codes are responsible right
+[Assistant]
+Yes. These two scripts perform the BLAST comparison step after `fetch_fasta.py`.
+
+## Workflow
+
+```text
+UniProt accession TXT files
+        |
+        v
+fetch_fasta.py
+        |
+        v
+query_sequences.fasta
+        |
+        v
+ref_blast_01.py
+        |
+        v
+BLAST results TSV
+        |
+        v
+filter_ref_hits_01.py
+        |
+        v
+Filtered reference matches
+```
+
+## 1. `ref_blast_01.py`
+
+File: [ref_blast_01.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/ref_blast_01.py)
+
+It runs `blastp` using:
+
+- The FASTA generated by `fetch_fasta.py` as the **query**
+- A prebuilt reference BLAST database as the **database**
+
+It asks for:
+
+- Query FASTA path
+- BLAST reference database path
+- Output directory and filename
+- E-value threshold
+- Maximum target sequences
+- Number of threads
+
+It produces a tabular BLAST result containing:
+
+- Query ID
+- Reference sequence ID
+- Percent identity
+- Alignment length
+- Query/reference lengths
+- Alignment positions
+- E-value
+- Bit score
+- Query coverage
+
+## 2. `filter_ref_hits_01.py`
+
+File: [filter_ref_hits_01.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/filter_ref_hits_01.py)
+
+It reads the BLAST TSV and applies additional filters:
+
+- Minimum percentage identity
+- Minimum query coverage
+- Maximum E-value
+
+For each query UniProt accession, it selects the best hit using:
+
+1. Highest query coverage
+2. Highest percent identity
+3. Highest bit score
+4. Lowest E-value
+
+It then creates:
+
+```text
+reference_map.tsv
+no_reference_hit.txt
+selected_references.fasta
+```
+
+It also writes individual FASTA files for the selected reference sequences.
+
+## Important inputs for `filter_ref_hits_01.py`
+
+It requires:
+
+1. BLAST TSV from `ref_blast_01.py`
+2. Original reference FASTA used to create the BLAST database
+3. Query FASTA generated by `fetch_fasta.py`
+
+The reference FASTA is needed to retrieve the actual sequences corresponding to the selected BLAST hits.
+
+For homopolymers and heteropolymers, run the workflow separately:
+
+```text
+homopolymer_accessions.txt
+        → homopolymer_query.fasta
+        → homopolymer BLAST TSV
+        → filtered homopolymer references
+```
+
+and:
+
+```text
+heteropolymer_accessions.txt
+        → heteropolymer_query.fasta
+        → heteropolymer BLAST TSV
+        → filtered heteropolymer references
+```
+
+So, yes: `ref_blast_01.py` performs the BLAST search, and `filter_ref_hits_01.py` filters and summarizes the BLAST matches.
+--------------------------------------------------------------------------------
+
+Turn 26
+[User]
+next step is taking the selected_references.fasta and using blast_runner_02.py blast genomesdb contain all the strains proteins
+[Assistant]
+Yes. [Blast_runner_02.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/Blast_runner_02.py) takes the selected reference FASTA sequences and searches them against a BLAST database containing proteins from all strains.
+
+## Workflow
+
+```text
+selected_references.fasta
+        |
+        v
+Blast_runner_02.py
+        |
+        v
+BLAST XML results against genomes database
+```
+
+## Important input requirement
+
+The script expects a **folder containing FASTA files**, not a single FASTA file directly.
+
+For example:
+
+```text
+selected_reference_queries/
+└── selected_references.fasta
+```
+
+Enter:
+
+```text
+Enter path to the FASTA query folder:
+selected_reference_queries
+```
+
+It processes every `.fasta` file in that folder.
+
+## Inputs requested
+
+1. FASTA query folder
+2. BLAST database path
+3. Output folder
+4. BLAST program:
+   - `blastp` for protein-versus-protein searches
+   - `blastn` for nucleotide-versus-nucleotide searches
+5. Number of threads
+6. Maximum target sequences
+
+For a database containing strain proteins, use:
+
+```text
+blastp
+```
+
+## BLAST settings
+
+The script runs each query with:
+
+```text
+-evalue 1e-5
+-outfmt 5
+-max_target_seqs <your value>
+-num_threads <your value>
+```
+
+`outfmt 5` produces XML output.
+
+For:
+
+```text
+selected_references.fasta
+```
+
+the output will be:
+
+```text
+selected_references.xml
+```
+
+## Useful behavior
+
+- Creates the output folder if needed.
+- Processes all `.fasta` files in the query folder.
+- Skips a FASTA file if its corresponding `.xml` output already exists.
+- Continues processing other files if one BLAST search fails.
+
+The BLAST database must already be created, for example with `makeblastdb`, and should be a protein database when using `blastp`.
+--------------------------------------------------------------------------------
+
+Turn 27
+[User]
+next what are the steps and which codes I need to run in the codes_for_processing in sequence order 
+[Assistant]
+Recommended sequence:
+
+## 1. Create the entity summary
+
+Run [fasta_mmcif_entity_chain_to_csv.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fasta_mmcif_entity_chain_to_csv.py).
+
+Inputs:
+
+- FASTA file/directory
+- mmCIF file/directory
+
+Output:
+
+```text
+entity_chain_summary.csv
+```
+
+This identifies polypeptide and biological entities.
+
+## 2. Cluster CIF files
+
+Run [cluster_cif.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/cluster_cif.py).
+
+Inputs:
+
+- CIF folder
+- Output folder
+- Optional PDB ID CSV
+- `entity_chain_summary.csv`
+
+Outputs include:
+
+```text
+cif_accession_clusters.json
+cif_file_accessions.csv
+cif_clusters.csv
+homopolymer_pdb_ids.csv
+heteropolymer_pdb_ids.csv
+unmapped_pdb_ids.csv
+```
+
+The homopolymer and heteropolymer CSVs contain:
+
+```csv
+pdb_id,accessions
+```
+
+## 3. Extract homopolymer accessions
+
+Run [extract_all_accessions.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/extract_all_accessions.py).
+
+Input:
+
+```text
+homopolymer_pdb_ids.csv
+```
+
+Output:
+
+```text
+homopolymer_accessions.txt
+```
+
+## 4. Extract heteropolymer accessions
+
+Run the same script again.
+
+Input:
+
+```text
+heteropolymer_pdb_ids.csv
+```
+
+Output:
+
+```text
+heteropolymer_accessions.txt
+```
+
+The script removes duplicate accession IDs.
+
+## 5. Download UniProt FASTA sequences
+
+Run [fetch_fasta.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/fetch_fasta.py) twice:
+
+```text
+homopolymer_accessions.txt
+heteropolymer_accessions.txt
+```
+
+Outputs:
+
+```text
+homopolymer_sequences.fasta
+heteropolymer_sequences.fasta
+```
+
+## 6. Build or prepare the reference BLAST database
+
+Use the reference protein FASTA and `makeblastdb`:
+
+```bash
+makeblastdb \
+  -in reference_proteins.fasta \
+  -dbtype prot \
+  -out ref_db
+```
+
+## 7. BLAST UniProt sequences against the reference database
+
+Run [ref_blast_01.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/ref_blast_01.py) separately for homopolymers and heteropolymers.
+
+Inputs:
+
+- Downloaded UniProt query FASTA
+- Reference BLAST database
+- E-value and other BLAST settings
+
+Outputs:
+
+```text
+homopolymer_blast.tsv
+heteropolymer_blast.tsv
+```
+
+## 8. Filter and select the best reference hits
+
+Run [filter_ref_hits_01.py](/home/neelamnishanth/Kp_data_processing/codes_for_preprocessing/filter_ref_hits_01.py) for each BLAST TSV.
+
+It filters using:
+
+- Minimum identity
+- Minimum query coverage
+- Maximum E-value
+
+Outputs include:
+
+```text
+reference_map.tsv
+no_reference_hit.txt
+selected_references.fasta
+```
+
+## 9. BLAST selected references against all-strain proteins
+
+Place the selected reference FASTA files in one folder, for example:
+
+```text
+selected_reference_queries/
+├── homopolymer_selected_references.fasta
+└── heteropolymer_selected_references.fasta
+```
+
+Create or provide the all-strain protein BLAST database.
+
+Then run [Blast_runner_02.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/Blast_runner_02.py).
+
+Use:
+
+```text
+blastp
+```
+
+Inputs:
+
+- Folder containing selected reference FASTA files
+- All-strain protein BLAST database
+- Output folder
+- Number of threads
+- Maximum target sequences
+
+Outputs:
+
+```text
+homopolymer_selected_references.xml
+heteropolymer_selected_references.xml
+```
+
+## Scripts no longer required for this workflow
+
+These are not needed in the main workflow:
+
+- `split_single_multi_entity.py`
+- `extract_single_accession_clusters.py`
+- `fasta_extract_from_uni.py`
+
+The classification is now handled inside `cluster_cif.py`, and sequence downloading is handled by `fetch_fasta.py`.
+--------------------------------------------------------------------------------
+
+Turn 28
+[User]
+now in the folder codes_for_processing codes are present which codes I need run in an order 
+[Assistant]
+For the main protein-variation analysis, run the files in this order:
+
+## Main workflow
+
+### 1. BLAST selected references against the strain-protein database
+
+Run [Blast_runner_02.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/Blast_runner_02.py).
+
+Input:
+
+- Folder containing `selected_references.fasta`
+- All-strain protein BLAST database
+- `blastp`
+- Threads
+- Maximum target sequences
+
+Output:
+
+```text
+*.xml
+```
+
+### 2. Filter BLAST XML hits
+
+Run [code_for_hit_filter_01.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/code_for_hit_filter_01.py).
+
+Inputs:
+
+- BLAST XML folder
+- All-strain protein BLAST database
+- Output folder
+- Folder containing the original query FASTA files
+- No-hit log path
+
+It filters hits using:
+
+```text
+Identity >= 90%
+Coverage >= 70%
+E-value < 1e-5
+```
+
+Outputs:
+
+```text
+filtered_hits_*.faa
+filtered_hits_csv/*_hit_defs.csv
+```
+
+Use `code_for_hit_filter_01.py`, not [code_for_hit_filter.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/code_for_hit_filter.py), because `_01` calculates coverage and identity across multiple HSPs more robustly.
+
+### 3. Count filtered hits
+
+Run [count_filtered_hits.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/count_filtered_hits.py).
+
+Input:
+
+```text
+filtered_hits_csv/
+```
+
+This step is optional and creates a count summary for each query.
+
+### 4. Perform multiple sequence alignment
+
+Run [MSA_runnner.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/MSA_runnner.py).
+
+Input:
+
+```text
+filtered_hits_*.faa
+```
+
+It uses MAFFT and produces:
+
+```text
+MSA_*.faa
+```
+
+Files containing fewer than two sequences are skipped.
+
+### 5. Extract mutations
+
+Run [extract_mutations_01.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/extract_mutations_01.py).
+
+Input:
+
+```text
+MSA_*.faa
+```
+
+Outputs:
+
+```text
+mutations/*_mutations.csv
+mutation_summary.csv
+```
+
+Use `_01`, not [extract_mutations.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/extract_mutations.py), because `_01`:
+
+- Treats the first sequence as the reference
+- Counts mutations only among homologs
+- Checks equal alignment lengths
+- Reports deletions, insertions, and substitutions separately
+
+### 6. Calculate PSSM values
+
+Run [PSSM.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/PSSM.py).
+
+Input:
+
+```text
+mutations/*_mutations.csv
+```
+
+Output:
+
+```text
+*_PSSM.csv
+```
+
+It calculates the percentage score of each substitution at each aligned position.
+
+## Complete sequence
+
+```text
+Blast_runner_02.py
+        |
+        v
+code_for_hit_filter_01.py
+        |
+        v
+count_filtered_hits.py        optional
+        |
+        v
+MSA_runnner.py
+        |
+        v
+extract_mutations_01.py
+        |
+        v
+PSSM.py
+```
+
+## Other files
+
+### [filter_reference_seq.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/filter_reference_seq.py)
+
+This is an alternative older filtering script for a specific hard-coded BLAST format:
+
+```text
+results/pdb_to_ref_raw.fmt6
+```
+
+It is not needed if you already use `ref_blast_01.py` and `filter_ref_hits_01.py`.
+
+### [representative_fasta.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/representative_fasta.py)
+
+This is a separate utility that combines selected individual FASTA files listed in:
+
+```text
+results/representatives.txt
+```
+
+It is not part of the main BLAST-to-mutation workflow.
+
+### [filter.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/filter.py)
+
+This is a separate metadata-filtering script. It removes selected organism names from an NCBI TSV and writes assembly accessions. Run it only if you need to prepare or clean strain metadata before building the strain-protein BLAST database.
+--------------------------------------------------------------------------------
+
+Turn 29
+[User]
+explain in detail about the pssm 
+[Assistant]
+[PSSM.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/PSSM.py) calculates the relative frequency of amino-acid substitutions at each aligned protein position.
+
+It should be run after [extract_mutations_01.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/extract_mutations_01.py).
+
+## Input
+
+The script asks for:
+
+```text
+Enter the folder containing mutation CSV files:
+Enter the output directory path:
+```
+
+The input folder must contain files ending with:
+
+```text
+_mutations.csv
+```
+
+Example:
+
+```text
+mutations/
+├── MSA_query1_mutations.csv
+├── MSA_query2_mutations.csv
+└── MSA_query3_mutations.csv
+```
+
+The mutation CSVs are generated from the multiple sequence alignments.
+
+A typical mutation CSV contains columns such as:
+
+```text
+Aligned Position
+Reference Position
+Reference Residue
+Mutation Type
+Mutated Residue
+Count
+Total Homologs
+Percentage
+Substitution Type
+```
+
+Example:
+
+```csv
+Aligned Position,Reference Position,Reference Residue,Mutation Type,Mutated Residue,Count
+25,25,A,Substitution,V,8
+25,25,A,Substitution,T,2
+```
+
+## What the script does
+
+For each mutation CSV:
+
+### 1. Reads the mutation data
+
+```python
+df = pd.read_csv(input_csv)
+```
+
+### 2. Keeps only substitutions
+
+```python
+subs_df = df[df['Mutation Type'] == 'Substitution'].copy()
+```
+
+It ignores:
+
+- Deletions
+- Insertions
+
+Only amino-acid replacements are used.
+
+### 3. Calculates the total substitution count at each position
+
+```python
+position_totals = subs_df.groupby(
+    'Aligned Position'
+)['Count'].transform('sum')
+```
+
+For example:
+
+```text
+Position 25:
+A → V: Count = 8
+A → T: Count = 2
+```
+
+Total substitutions at position 25:
+
+```text
+8 + 2 = 10
+```
+
+### 4. Calculates the PSS value
+
+```python
+subs_df['PSS'] = subs_df['Count'] / position_totals * 100
+```
+
+For the example:
+
+```text
+A → V = 8 / 10 × 100 = 80%
+A → T = 2 / 10 × 100 = 20%
+```
+
+## Output
+
+The output filename is created by replacing:
+
+```text
+_mutations.csv
+```
+
+with:
+
+```text
+_PSSM.csv
+```
+
+Example:
+
+```text
+Input:
+MSA_query1_mutations.csv
+
+Output:
+MSA_query1_PSSM.csv
+```
+
+The output contains the original substitution rows plus a new column:
+
+```text
+PSS
+```
+
+Example:
+
+```csv
+Aligned Position,Reference Residue,Mutation Type,Mutated Residue,Count,PSS
+25,A,Substitution,V,8,80.0
+25,A,Substitution,T,2,20.0
+```
+
+## Meaning of the PSS value
+
+The `PSS` value represents the percentage distribution of observed substitutions at a particular aligned position.
+
+| PSS value | Meaning |
+|---:|---|
+| 100% | All substitutions at that position are the same amino acid |
+| 80% | That substitution is dominant among substitutions at the position |
+| 50% | Half of the observed substitutions are that amino acid |
+| Low value | The substitution is less common at that position |
+
+For every aligned position, the PSS values for all substitution types will normally sum to approximately:
+
+```text
+100%
+```
+
+## Important limitation
+
+This script does not calculate a classical statistical PSSM based on log-odds scores.
+
+It calculates:
+
+```text
+percentage of each substitution among all substitutions at that position
+```
+
+For example, if there are 100 homologs and only 10 contain substitutions at position 25:
+
+```text
+8 sequences: A → V
+2 sequences: A → T
+90 sequences: A → A
+```
+
+The script calculates:
+
+```text
+A → V = 80%
+A → T = 20%
+```
+
+It does not include the 90 unchanged sequences in the denominator.
+
+Therefore, the score means:
+
+> Among the observed substitutions at this position, how frequently does each mutated residue occur?
+
+It does not mean:
+
+> What percentage of all homologs contain this mutation?
+
+## Full workflow
+
+```text
+MSA_*.faa
+    |
+    v
+extract_mutations_01.py
+    |
+    v
+*_mutations.csv
+    |
+    v
+PSSM.py
+    |
+    v
+*_PSSM.csv
+```
+
+The generated PSSM files can then be used to identify positions where substitutions are concentrated or where particular amino-acid changes are common among the homologs.
+--------------------------------------------------------------------------------
+
+Turn 30
+[User]
+now I want to implement a calculation for each substitution let suppose 
+8 sequences: A → V
+2 sequences: A → T
+90 sequences: A → A
+total mutation means included all substitutions, deletion, insertion = 263 , total substitutions in whole sequence is = 182  now calculation for each postion A → V   8/10 % 182/263 and for this implement natural log
+understand what we need to do let me know 
+[Assistant]
+Understood. For each MSA/mutation file, the new score should be:
+
+```text
+Local substitution frequency =
+substitution count at a position /
+total substitution counts at that position
+```
+
+```text
+Global substitution background =
+total substitutions in the whole sequence /
+total mutations in the whole sequence
+```
+
+Then:
+
+```text
+Score = ln(Local substitution frequency / Global substitution background)
+```
+
+For your example:
+
+```text
+A → V = 8 / (8 + 2) = 0.8
+Global background = 182 / 263 = 0.692
+```
+
+Therefore:
+
+```text
+A → V score = ln(0.8 / 0.692)
+             ≈ ln(1.156)
+             ≈ 0.145
+```
+
+For `A → T`:
+
+```text
+A → T = 2 / 10 = 0.2
+
+Score = ln(0.2 / 0.692)
+      ≈ -1.24
+```
+
+### Interpretation
+
+- **Positive score**: substitution is enriched at that position.
+- **Zero score**: substitution frequency equals the global background.
+- **Negative score**: substitution is less frequent than the global background.
+
+The unchanged sequences, such as:
+
+```text
+90 sequences: A → A
+```
+
+are not included in the local substitution denominator because they are not mutations.
+
+However, deletions and insertions are included in the global total of `263`, so they influence the background substitution probability.
+
+The calculation should be performed separately for each MSA/mutation file, and the resulting score can be added as a new column, for example:
+
+```text
+Log_PSS
+```
+
+in the existing PSSM output.
+--------------------------------------------------------------------------------
+
+Turn 31
+[User]
+now I need to implement this calculation in pssm code so that it will add one more column in results of each file, for each file the total mutations and total substituations are already calculated in the results of the folder /home/neelamnishanth/Kp_data_processing/results/Mutation_result/single_chain/mutation_summary.csv
+if you check this file every details are present so read the code of pssm.py and let me know what is the plan and what are the input file required to calculate lit 
+[Assistant]
+## Plan for updating `PSSM.py`
+
+The script will continue reading each `*_mutations.csv` file, but it will additionally read:
+
+```text
+/home/neelamnishanth/Kp_data_processing/results/Mutation_result/single_chain/mutation_summary.csv
+```
+
+### Required inputs
+
+1. **Mutation CSV folder**
+
+Example:
+
+```text
+results/Mutation_result/single_chain/mutations/
+```
+
+Files should look like:
+
+```text
+MSA_YP_005229591.1_mutations.csv
+MSA_YP_005227859.1_mutations.csv
+```
+
+2. **Mutation summary CSV**
+
+```text
+results/Mutation_result/single_chain/mutation_summary.csv
+```
+
+It provides:
+
+- `MSA File`
+- `Number of Mutations`
+- `Substitutions`
+
+Example:
+
+```csv
+MSA File,Number of Mutations,Substitutions
+MSA_YP_005229591.1.faa,263,182
+```
+
+3. **Output directory**
+
+Example:
+
+```text
+results/PSSM/single_chain/
+```
+
+No original MSA or FASTA files are required for this calculation.
+
+## Calculation for every substitution
+
+For each mutation row, for example:
+
+```text
+A → V, Count = 8
+A → T, Count = 2
+```
+
+### 1. Position-specific substitution frequency
+
+```text
+position_total = 8 + 2 = 10
+```
+
+For `A → V`:
+
+```text
+local_frequency = 8 / 10 = 0.8
+```
+
+### 2. Global substitution background
+
+From `mutation_summary.csv`:
+
+```text
+total mutations = 263
+total substitutions = 182
+```
+
+Therefore:
+
+```text
+global_background = 182 / 263 = 0.692
+```
+
+### 3. Natural-log enrichment score
+
+```text
+Log_PSS = ln(local_frequency / global_background)
+```
+
+For `A → V`:
+
+```text
+Log_PSS = ln(0.8 / 0.692)
+        ≈ 0.145
+```
+
+The output will retain the existing `PSS` column and add:
+
+```text
+Log_PSS
+```
+
+## Output example
+
+```csv
+Aligned Position,Reference Residue,Mutated Residue,Count,PSS,Log_PSS
+25,A,V,8,80.0,0.145
+25,A,T,2,20.0,-1.242
+```
+
+## File matching requirement
+
+The script must match:
+
+```text
+MSA_YP_005229591.1_mutations.csv
+```
+
+with this summary row:
+
+```text
+MSA_YP_005229591.1.faa
+```
+
+So the matching logic should remove `_mutations.csv` from the mutation filename and add `.faa`.
+
+The file names must correspond. For example, the tagged PSSM file references:
+
+```text
+MSA_YP_005221079.1
+```
+
+but the displayed summary excerpt contains:
+
+```text
+MSA_YP_005229591.1.faa
+```
+
+The correct summary row must exist for every mutation CSV; otherwise the script should report the missing summary entry rather than silently calculate an incorrect score.
+--------------------------------------------------------------------------------
+
+Turn 32
+[User]
+no actually how this pssm.py work 
+[Assistant]
+Current [PSSM.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/PSSM.py) works as follows:
+
+1. Asks for:
+   - Folder containing mutation CSV files
+   - Output folder
+
+2. Finds files matching:
+
+```text
+*_mutations.csv
+```
+
+3. Reads each mutation CSV.
+
+4. Keeps only rows where:
+
+```text
+Mutation Type == "Substitution"
+```
+
+Deletions and insertions are ignored.
+
+5. Groups substitutions by `Aligned Position` and calculates the total substitution count at each position.
+
+6. Calculates:
+
+```python
+PSS = Count / position_total * 100
+```
+
+For example:
+
+```text
+Position 25:
+A → V: Count = 8
+A → T: Count = 2
+```
+
+Then:
+
+```text
+position_total = 8 + 2 = 10
+
+A → V PSS = 8 / 10 × 100 = 80%
+A → T PSS = 2 / 10 × 100 = 20%
+```
+
+7. Writes a new output file by replacing:
+
+```text
+_mutations.csv
+```
+
+with:
+
+```text
+_PSSM.csv
+```
+
+Example:
+
+```text
+Input:
+MSA_YP_005221079.1_mutations.csv
+
+Output:
+MSA_YP_005221079.1_PSSM.csv
+```
+
+The output contains the original substitution rows plus a new `PSS` column.
+
+### Important point
+
+The current code does **not**:
+
+- Read `mutation_summary.csv`
+- Calculate total mutations
+- Calculate total substitutions across the sequence
+- Apply natural logarithms
+- Process insertions or deletions in the PSS calculation
+
+It only calculates the percentage distribution of substitution types at each aligned position.
+--------------------------------------------------------------------------------
+
+Turn 33
+[User]
+same way know we need to implement one more calculation by taking input summary csv and match the file names 
+[Assistant]
+Updated [PSSM.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/PSSM.py).
+
+It now asks for:
+
+1. Mutation CSV folder
+2. `mutation_summary.csv`
+3. Output folder
+
+For each mutation file, it matches:
+
+```text
+MSA_YP_005229591.1_mutations.csv
+```
+
+with:
+
+```text
+MSA_YP_005229591.1.faa
+```
+
+from the summary CSV.
+
+It uses:
+
+```text
+Number of Mutations = 263
+Substitutions = 182
+```
+
+and calculates:
+
+```text
+global_frequency = 182 / 263
+```
+
+For each substitution:
+
+```text
+local_frequency = substitution_count / total_substitutions_at_position
+Log_PSS = ln(local_frequency / global_frequency)
+```
+
+The output retains the existing `PSS` column and adds:
+
+```text
+Log_PSS
+```
+
+Example output columns:
+
+```text
+Mutation Type,Count,PSS,Log_PSS
+Substitution,8,80.0,0.145
+```
+
+The script also validates:
+
+- Required summary columns exist
+- Every mutation file has a matching summary row
+- Summary totals are valid
+- Duplicate summary entries do not exist
+
+Outputs are still named:
+
+```text
+*_PSSM.csv
+```
+--------------------------------------------------------------------------------
+
+Turn 34
+[User]
+check the code once again
+[Assistant]
+I checked [PSSM.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/PSSM.py) again.
+
+The logic is correct:
+
+- Matches each mutation file with its `MSA File` summary entry.
+- Reads total mutations and total substitutions.
+- Calculates position-specific `PSS`.
+- Calculates:
+
+```text
+Log_PSS = ln(local substitution frequency / global substitution frequency)
+```
+
+- Adds `Log_PSS` to every substitution row.
+- Preserves the existing output format.
+
+I also added validation for:
+
+- Missing summary rows
+- Invalid summary totals
+- Mutation files with no substitutions
+- Non-numeric or negative substitution counts
+
+Output files remain:
+
+```text
+*_PSSM.csv
+```
+--------------------------------------------------------------------------------
+
+Turn 35
+[User]
+what are the inputs user need to give
+[Assistant]
+For [PSSM.py](/home/neelamnishanth/Kp_data_processing/codes_for_processing/PSSM.py), provide these three inputs:
+
+### 1. Mutation CSV folder
+
+Folder containing files such as:
+
+```text
+MSA_YP_005229591.1_mutations.csv
+MSA_YP_005227859.1_mutations.csv
+```
+
+Example:
+
+```text
+/home/neelamnishanth/Kp_data_processing/results/Mutation_result/single_chain/mutations
+```
+
+### 2. Mutation summary CSV
+
+```text
+/home/neelamnishanth/Kp_data_processing/results/Mutation_result/single_chain/mutation_summary.csv
+```
+
+This file must contain:
+
+```text
+MSA File
+Number of Mutations
+Substitutions
+```
+
+### 3. Output folder
+
+Folder where the PSSM results should be saved.
+
+Example:
+
+```text
+/home/neelamnishanth/Kp_data_processing/results/PSSM/single_chain
+```
+
+The script will create files such as:
+
+```text
+MSA_YP_005229591.1_PSSM.csv
+```
+
+The mutation filename and summary `MSA File` must correspond:
+
+```text
+MSA_YP_005229591.1_mutations.csv
+MSA_YP_005229591.1.faa
+```
+--------------------------------------------------------------------------------
